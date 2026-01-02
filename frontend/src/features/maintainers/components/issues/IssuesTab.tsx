@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, ExternalLink, User, ChevronDown, Plus, Award, Users, Star, CheckCircle, MessageSquare, Filter, Search, Loader2, AlertCircle } from 'lucide-react';
 import { useTheme } from '../../../../shared/contexts/ThemeContext';
 import { Issue } from '../../types';
 import { EmptyIssueState } from './EmptyIssueState';
 import { IssueCard } from '../../../../shared/components/ui/IssueCard';
 import { getProjectIssues } from '../../../../shared/api/client';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Project {
   id: string;
@@ -54,6 +55,18 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh }: IssuesTab
   const [issues, setIssues] = useState<Array<IssueFromAPI & { projectName: string; projectId: string }>>([]);
   const [isLoadingIssues, setIsLoadingIssues] = useState(true);
   const [issuesError, setIssuesError] = useState<string | null>(null);
+
+  // Helper function to format time ago (memoized)
+  const formatTimeAgo = useCallback((dateString: string | null): string => {
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Unknown';
+      return formatDistanceToNow(date, { addSuffix: true });
+    } catch {
+      return 'Unknown';
+    }
+  }, []);
 
   // Fetch issues from selected projects
   useEffect(() => {
@@ -260,23 +273,74 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh }: IssuesTab
                   const matchesStatus = selectedFilters.status.length === 0 || 
                     selectedFilters.status.includes(issue.state);
                   
-                  return matchesSearch && matchesStatus;
+                  // Applicants filter
+                  const matchesApplicants = selectedFilters.applicants.length === 0 || 
+                    selectedFilters.applicants.some(filter => {
+                      const applicantCount = issue.comments_count || 0;
+                      if (filter === 'no applicants') return applicantCount === 0;
+                      if (filter === '1-5 applicants') return applicantCount >= 1 && applicantCount <= 5;
+                      if (filter === '6-10 applicants') return applicantCount >= 6 && applicantCount <= 10;
+                      if (filter === '10+ applicants') return applicantCount > 10;
+                      return false;
+                    });
+                  
+                  // Assignee filter (check if author matches)
+                  const matchesAssignee = selectedFilters.assignee.length === 0 || 
+                    selectedFilters.assignee.includes(issue.author_login.toLowerCase());
+                  
+                  // Stale filter (issues older than 30 days)
+                  const matchesStale = selectedFilters.stale.length === 0 || 
+                    selectedFilters.stale.some(filter => {
+                      if (filter === 'not stale') {
+                        const updatedAt = issue.updated_at ? new Date(issue.updated_at) : new Date(issue.last_seen_at);
+                        const daysSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60 * 24);
+                        return daysSinceUpdate < 30;
+                      }
+                      if (filter === 'stale') {
+                        const updatedAt = issue.updated_at ? new Date(issue.updated_at) : new Date(issue.last_seen_at);
+                        const daysSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60 * 24);
+                        return daysSinceUpdate >= 30;
+                      }
+                      return false;
+                    });
+                  
+                  // Categories filter (check tags)
+                  const matchesCategories = selectedFilters.categories.length === 0 || 
+                    selectedFilters.categories.some(category => {
+                      const issueTags = issue.labels?.map((l: any) => (l.name || l).toLowerCase()) || [];
+                      return issueTags.includes(category.toLowerCase());
+                    });
+                  
+                  // Languages filter (not available in current API response, skip for now)
+                  const matchesLanguages = selectedFilters.languages.length === 0;
+                  
+                  // Labels filter
+                  const matchesLabels = selectedFilters.labels.length === 0 || 
+                    selectedFilters.labels.some(label => {
+                      const issueTags = issue.labels?.map((l: any) => (l.name || l).toLowerCase()) || [];
+                      return issueTags.includes(label.toLowerCase());
+                    });
+                  
+                  return matchesSearch && matchesStatus && matchesApplicants && matchesAssignee && 
+                         matchesStale && matchesCategories && matchesLanguages && matchesLabels;
                 })
                 .map((issue) => {
                   // Convert API issue to Issue type for compatibility
                   const issueForCard: Issue = {
                     id: issue.github_issue_id.toString(),
+                    number: issue.number, // Store the issue number
                     title: issue.title,
                     repository: issue.projectName,
+                    repo: issue.projectName,
                     user: issue.author_login,
-                    timeAgo: issue.updated_at 
-                      ? new Date(issue.updated_at).toLocaleDateString()
-                      : 'Unknown',
+                    timeAgo: formatTimeAgo(issue.updated_at),
                     tags: issue.labels?.map((l: any) => l.name || l) || [],
                     applicants: issue.comments_count || 0,
+                    comments: issue.comments_count || 0,
                     applicant: null,
                     applicationStatus: 'pending',
                     discussions: [],
+                    url: issue.url,
                   };
 
                   return (
@@ -291,9 +355,7 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh }: IssuesTab
                         name: issue.author_login,
                         avatar: `https://github.com/${issue.author_login}.png?size=40`
                       }}
-                      timeAgo={issue.updated_at 
-                        ? new Date(issue.updated_at).toLocaleDateString()
-                        : 'Unknown'}
+                      timeAgo={formatTimeAgo(issue.updated_at)}
                       tags={issue.labels?.map((l: any) => l.name || l) || []}
                       isSelected={selectedIssue?.id === issue.github_issue_id.toString()}
                       onClick={() => setSelectedIssue(issueForCard)}
@@ -329,7 +391,7 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh }: IssuesTab
                 <div className="flex items-center gap-3 mb-3">
                   <span className={`text-[24px] font-bold transition-colors ${
                     isDark ? 'text-[#c9983a]' : 'text-[#8b6f3a]'
-                  }`}>#{selectedIssue.id}</span>
+                  }`}>#{selectedIssue.number || selectedIssue.id}</span>
                   <h1 className={`text-[24px] font-bold transition-colors ${
                     isDark ? 'text-[#f5f5f5]' : 'text-[#2d2820]'
                   }`}>
@@ -353,15 +415,19 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh }: IssuesTab
                   <span className={`text-[13px] transition-colors ${isDark ? 'text-[#d4d4d4]' : 'text-[#7a6b5a]'}`}>
                     opened {selectedIssue.timeAgo}
                   </span>
-                  <a
-                    href="#"
-                    className={`flex items-center gap-1 text-[13px] font-semibold hover:underline transition-colors ${
-                      isDark ? 'text-[#c9983a]' : 'text-[#8b6f3a]'
-                    }`}
-                  >
-                    View on GitHub
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                  {selectedIssue.url && (
+                    <a
+                      href={selectedIssue.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center gap-1 text-[13px] font-semibold hover:underline transition-colors ${
+                        isDark ? 'text-[#c9983a]' : 'text-[#8b6f3a]'
+                      }`}
+                    >
+                      View on GitHub
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-2">

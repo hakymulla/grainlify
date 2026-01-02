@@ -56,9 +56,11 @@ export interface Discussion {
 }
 
 export interface Issue {
-  id: number;
+  id: string | number; // Can be string (github_issue_id) or number (issue number)
+  number?: number; // GitHub issue number (e.g., #1, #2)
   title: string;
   repo: string;
+  repository?: string; // Alternative field name
   comments: number;
   applicants: number;
   tags: string[];
@@ -68,6 +70,7 @@ export interface Issue {
   applicationStatus: 'none' | 'assigned' | 'pending';
   applicant?: Applicant;
   discussions?: Discussion[];
+  url?: string; // GitHub URL
 }
 
 export interface FilterState {
