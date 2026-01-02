@@ -37,6 +37,24 @@ func New(cfg config.Config, deps Deps) *fiber.App {
 
 	// Baseline middleware.
 	app.Use(requestid.New())
+	
+	// Add request logging middleware BEFORE recover to catch all requests
+	app.Use(func(c *fiber.Ctx) error {
+		// Log all incoming requests for debugging (especially webhooks)
+		if strings.HasPrefix(c.Path(), "/webhooks/") {
+			slog.Info("webhook request received",
+				"method", c.Method(),
+				"path", c.Path(),
+				"original_url", c.OriginalURL(),
+				"remote_ip", c.IP(),
+				"user_agent", c.Get("User-Agent"),
+				"content_type", c.Get("Content-Type"),
+				"content_length", c.Get("Content-Length"),
+			)
+		}
+		return c.Next()
+	})
+	
 	app.Use(recover.New())
 
 	// Configure CORS from environment variables
