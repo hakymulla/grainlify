@@ -1,6 +1,6 @@
 # 📘 Patchwork – Backend Architecture & System Flow
 
-Patchwork is an infrastructure-grade platform that connects open-source developers with open-source projects through verifiable contributions, automated rewards, and reputation — across multiple blockchain ecosystems.
+Patchwork is an infrastructure-grade platform that connects open-source developers with open-source projects through verifiable contributions, automated rewards, and reputation — within the Stellar ecosystem.
 
 ## 1. High-Level System Architecture
 
@@ -33,7 +33,7 @@ flowchart LR
 
     GITHUB[GitHub API/Webhooks]
 
-    CHAIN["Blockchain RPCs<br>Casper / Cronos"]
+    CHAIN["Blockchain RPCs<br>Stellar (Soroban)"]
 
     FE --> API
 
@@ -98,9 +98,7 @@ NATS
 
 ### Blockchain
 
-Casper RPC
-
-Cronos RPC + x402 facilitator
+Stellar RPC (Soroban / Horizon)
 
 ### Storage
 
@@ -118,7 +116,7 @@ JWT (short-lived)
 
 ### 🔐 Authentication
 
-Wallet login (EVM / Casper)
+Wallet login (Stellar)
 
 GitHub OAuth linking
 
@@ -150,7 +148,7 @@ Create bounties on issues
 
 Lock funds in on-chain escrow
 
-Multi-chain rewards
+Stellar-native rewards
 
 Deadlines & milestones
 
@@ -170,9 +168,7 @@ Async payout execution
 
 Retry-safe chain transactions
 
-x402 conditional payments (Cronos)
-
-Escrow release (Casper)
+Escrow release (Soroban)
 
 ### 🧠 Reputation System
 
@@ -406,9 +402,9 @@ Foundation-friendly
 
 This backend can support:
 
-Casper Hackathon
+Stellar Hackathon
 
-Cronos x402
+Soroban escrow payouts
 
 Long-term grants
 
