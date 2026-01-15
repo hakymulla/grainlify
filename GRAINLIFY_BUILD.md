@@ -8,7 +8,7 @@ Ecosystems fund programs (hackathons, quests, grant rounds).
 
 Selected projects receive grant allocations.
 
-Project maintainers lock these grants into **on-chain escrow smart contracts on Casper** and create bounties linked to GitHub issues.
+Project maintainers lock these grants into **on-chain escrow smart contracts on Stellar (Soroban)** and create bounties linked to GitHub issues.
 
 Contributors work normally on GitHub. When a pull request is reviewed and merged, Grainlify verifies the contribution off-chain using GitHub events and **automatically triggers an on-chain payout** from escrow to the contributor’s wallet.
 
@@ -36,7 +36,7 @@ It guarantees *how* funding is executed.
 flowchart TB
     Ecosystem[Ecosystem] -->|Grant Funds| Program[Program]
     Program -->|Grant Allocation| Project[Project]
-    Project -->|Lock Funds| Escrow[Casper Escrow Contract]
+    Project -->|Lock Funds| Escrow[Stellar (Soroban) Escrow Contract]
     Contributor[Contributor] -->|PR / Issues| GitHub[GitHub]
     GitHub -->|Events| Backend[Grainlify Backend]
     Backend -->|Verify PR & Issue| Verification[Off-chain Verification]
@@ -53,7 +53,7 @@ sequenceDiagram
     participant C as Contributor
     participant G as GitHub
     participant B as Grainlify Backend
-    participant S as Casper Smart Contract
+    participant S as Stellar (Soroban) Smart Contract
 
     E->>P: Allocate Grant
     P->>S: Lock Grant in Escrow
@@ -77,5 +77,5 @@ graph LR
 
 ## 🏁 Summary
 
-Grainlify turns ecosystem grants into automatic, verifiable payments for open-source contributions, using Casper as a secure settlement layer and GitHub as the source of truth for real work.
+Grainlify turns ecosystem grants into automatic, verifiable payments for open-source contributions, using Stellar as the settlement layer and GitHub as the source of truth for real work.
 
