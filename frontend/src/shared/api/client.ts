@@ -39,7 +39,11 @@ async function apiRequest<T>(
   endpoint: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { requiresAuth = false, headers = {}, ...fetchOptions } = options;
+  const {
+    requiresAuth = false,
+    headers = {},
+    ...fetchOptions
+  } = options;
 
   const url = `${API_BASE_URL}${endpoint}`;
   if (endpoint === "/ecosystems") {
@@ -129,7 +133,9 @@ async function apiRequest<T>(
         errorData.message || errorData.error || "API request failed",
       );
     } catch {
-      throw new Error(`API request failed with status ${response.status}`);
+      throw new Error(
+        `API request failed with status ${response.status}`,
+      );
     }
   }
 
@@ -224,8 +230,14 @@ export const getUserProfile = () =>
     projects_contributed_to_count: number;
     projects_led_count: number;
     rewards_count: number;
-    languages: Array<{ language: string; contribution_count: number }>;
-    ecosystems: Array<{ ecosystem_name: string; contribution_count: number }>;
+    languages: Array<{
+      language: string;
+      contribution_count: number;
+    }>;
+    ecosystems: Array<{
+      ecosystem_name: string;
+      contribution_count: number;
+    }>;
     rank: {
       position: number | null;
       tier: string;
@@ -234,7 +246,10 @@ export const getUserProfile = () =>
     };
   }>("/profile", { requiresAuth: true });
 
-export const getProfileCalendar = (userId?: string, login?: string) => {
+export const getProfileCalendar = (
+  userId?: string,
+  login?: string,
+) => {
   const params = new URLSearchParams();
   if (userId) params.append("user_id", userId);
   if (login) params.append("login", login);
@@ -272,10 +287,15 @@ export const getProfileActivity = (
     total: number;
     limit: number;
     offset: number;
-  }>(`/profile/activity?${params.toString()}`, { requiresAuth: true });
+  }>(`/profile/activity?${params.toString()}`, {
+    requiresAuth: true,
+  });
 };
 
-export const getProjectsContributed = (userId?: string, login?: string) => {
+export const getProjectsContributed = (
+  userId?: string,
+  login?: string,
+) => {
   const params = new URLSearchParams();
   if (userId) params.append("user_id", userId);
   if (login) params.append("login", login);
@@ -303,8 +323,14 @@ export const getPublicProfile = (userId?: string, login?: string) => {
     contributions_count: number;
     projects_contributed_to_count: number;
     projects_led_count: number;
-    languages: Array<{ language: string; contribution_count: number }>;
-    ecosystems: Array<{ ecosystem_name: string; contribution_count: number }>;
+    languages: Array<{
+      language: string;
+      contribution_count: number;
+    }>;
+    ecosystems: Array<{
+      ecosystem_name: string;
+      contribution_count: number;
+    }>;
     bio?: string;
     website?: string;
     telegram?: string;
@@ -327,6 +353,11 @@ export const updateProfile = (data: {
   location?: string;
   website?: string;
   bio?: string;
+  telegram?: string;
+  linkedin?: string;
+  whatsapp?: string;
+  twitter?: string;
+  discord?: string;
 }) =>
   apiRequest<{ message: string }>("/profile/update", {
     method: "PUT",
