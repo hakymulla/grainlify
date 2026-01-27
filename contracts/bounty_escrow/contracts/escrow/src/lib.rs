@@ -97,7 +97,7 @@ use events::{
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, vec, Address, Env,
-    String, Symbol, Vec,
+    Vec,
 };
 
 // ==================== MONITORING MODULE ====================
@@ -446,16 +446,19 @@ pub enum Error {
 
     /// Returned when caller lacks required authorization for the operation
     Unauthorized = 7,
+    InvalidFeeRate = 8,
+    FeeRecipientNotSet = 9,
+    InvalidBatchSize = 10,
+    BatchSizeMismatch = 11,
+    DuplicateBountyId = 12,
     /// Returned when amount is invalid (zero, negative, or exceeds available)
-    InvalidAmount = 8,
+    InvalidAmount = 13,
     /// Returned when deadline is invalid (in the past or too far in the future)
-    InvalidDeadline = 9,
-    BatchSizeMismatch = 10,
-    DuplicateBountyId = 11,
+    InvalidDeadline = 14,
     /// Returned when contract has insufficient funds for the operation
-    InsufficientFunds = 12,
+    InsufficientFunds = 16,
     /// Returned when refund is attempted without admin approval
-    RefundNotApproved = 13,
+    RefundNotApproved = 17,
 }
 
 // ============================================================================
@@ -578,10 +581,25 @@ pub struct ReleaseFundsItem {
 const MAX_BATCH_SIZE: u32 = 100;
 
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeConfig {
+    pub lock_fee_rate: i128, // Fee rate for lock operations (basis points, e.g., 100 = 1%)
+    pub release_fee_rate: i128, // Fee rate for release operations (basis points)
+    pub fee_recipient: Address, // Address to receive fees
+    pub fee_enabled: bool,   // Global fee enable/disable flag
+}
+
+// Fee rate is stored in basis points (1 basis point = 0.01%)
+// Example: 100 basis points = 1%, 1000 basis points = 10%
+const BASIS_POINTS: i128 = 10_000;
+const MAX_FEE_RATE: i128 = 1_000; // Maximum 10% fee
+
+#[contracttype]
 pub enum DataKey {
     Admin,
     Token,
     Escrow(u64),         // bounty_id
+    FeeConfig,           // Fee configuration
     RefundApproval(u64), // bounty_id -> RefundApproval
     ReentrancyGuard,
 }
@@ -650,6 +668,17 @@ impl BountyEscrowContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
 
+        // Initialize fee config with zero fees (disabled by default)
+        let fee_config = FeeConfig {
+            lock_fee_rate: 0,
+            release_fee_rate: 0,
+            fee_recipient: admin.clone(),
+            fee_enabled: false,
+        };
+        env.storage()
+            .instance()
+            .set(&DataKey::FeeConfig, &fee_config);
+
         // Emit initialization event
         emit_bounty_initialized(
             &env,
@@ -670,6 +699,95 @@ impl BountyEscrowContract {
         Ok(())
     }
 
+    /// Calculate fee amount based on rate (in basis points)
+    fn calculate_fee(amount: i128, fee_rate: i128) -> i128 {
+        if fee_rate == 0 {
+            return 0;
+        }
+        // Fee = (amount * fee_rate) / BASIS_POINTS
+        // Using checked arithmetic to prevent overflow
+        amount
+            .checked_mul(fee_rate)
+            .and_then(|x| x.checked_div(BASIS_POINTS))
+            .unwrap_or(0)
+    }
+
+    /// Get fee configuration (internal helper)
+    fn get_fee_config_internal(env: &Env) -> FeeConfig {
+        env.storage()
+            .instance()
+            .get(&DataKey::FeeConfig)
+            .unwrap_or_else(|| FeeConfig {
+                lock_fee_rate: 0,
+                release_fee_rate: 0,
+                fee_recipient: env.storage().instance().get(&DataKey::Admin).unwrap(),
+                fee_enabled: false,
+            })
+    }
+
+    /// Update fee configuration (admin only)
+    pub fn update_fee_config(
+        env: Env,
+        lock_fee_rate: Option<i128>,
+        release_fee_rate: Option<i128>,
+        fee_recipient: Option<Address>,
+        fee_enabled: Option<bool>,
+    ) -> Result<(), Error> {
+        if !env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::NotInitialized);
+        }
+
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+
+        let mut fee_config = Self::get_fee_config_internal(&env);
+
+        if let Some(rate) = lock_fee_rate {
+            if rate < 0 || rate > MAX_FEE_RATE {
+                return Err(Error::InvalidFeeRate);
+            }
+            fee_config.lock_fee_rate = rate;
+        }
+
+        if let Some(rate) = release_fee_rate {
+            if rate < 0 || rate > MAX_FEE_RATE {
+                return Err(Error::InvalidFeeRate);
+            }
+            fee_config.release_fee_rate = rate;
+        }
+
+        if let Some(recipient) = fee_recipient {
+            fee_config.fee_recipient = recipient;
+        }
+
+        if let Some(enabled) = fee_enabled {
+            fee_config.fee_enabled = enabled;
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::FeeConfig, &fee_config);
+
+        events::emit_fee_config_updated(
+            &env,
+            events::FeeConfigUpdated {
+                lock_fee_rate: fee_config.lock_fee_rate,
+                release_fee_rate: fee_config.release_fee_rate,
+                fee_recipient: fee_config.fee_recipient.clone(),
+                fee_enabled: fee_config.fee_enabled,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Get current fee configuration (view function)
+    pub fn get_fee_config(env: Env) -> FeeConfig {
+        Self::get_fee_config_internal(&env)
+    }
+
+    /// Lock funds for a specific bounty.
     // ========================================================================
     // Core Escrow Functions
     // ========================================================================
@@ -776,13 +894,37 @@ impl BountyEscrowContract {
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let client = token::Client::new(&env, &token_addr);
 
-        // Transfer funds from depositor to contract
-        client.transfer(&depositor, &env.current_contract_address(), &amount);
+        // Calculate and collect fee if enabled
+        let fee_config = Self::get_fee_config_internal(&env);
+        let fee_amount = if fee_config.fee_enabled && fee_config.lock_fee_rate > 0 {
+            Self::calculate_fee(amount, fee_config.lock_fee_rate)
+        } else {
+            0
+        };
+        let net_amount = amount - fee_amount;
+
+        // Transfer net amount from depositor to contract
+        client.transfer(&depositor, &env.current_contract_address(), &net_amount);
+
+        // Transfer fee to fee recipient if applicable
+        if fee_amount > 0 {
+            client.transfer(&depositor, &fee_config.fee_recipient, &fee_amount);
+            events::emit_fee_collected(
+                &env,
+                events::FeeCollected {
+                    operation_type: events::FeeOperationType::Lock,
+                    amount: fee_amount,
+                    fee_rate: fee_config.lock_fee_rate,
+                    recipient: fee_config.fee_recipient.clone(),
+                    timestamp: env.ledger().timestamp(),
+                },
+            );
+        }
 
         // Create escrow record
         let escrow = Escrow {
             depositor: depositor.clone(),
-            amount,
+            amount: net_amount, // Store net amount (after fee)
             status: EscrowStatus::Locked,
             deadline,
             refund_history: vec![&env],
@@ -799,7 +941,7 @@ impl BountyEscrowContract {
             &env,
             FundsLocked {
                 bounty_id,
-                amount,
+                amount: net_amount, // Emit net amount (after fee)
                 depositor: depositor.clone(),
                 deadline,
             },
@@ -920,19 +1062,50 @@ impl BountyEscrowContract {
             .persistent()
             .set(&DataKey::Escrow(bounty_id), &escrow);
 
-        // Transfer funds to contributor
-        client.transfer(
-            &env.current_contract_address(),
-            &contributor,
-            &escrow.amount,
-        );
+        // Calculate and collect fee if enabled
+        let fee_config = Self::get_fee_config_internal(&env);
+        let fee_amount = if fee_config.fee_enabled && fee_config.release_fee_rate > 0 {
+            Self::calculate_fee(escrow.amount, fee_config.release_fee_rate)
+        } else {
+            0
+        };
+        let net_amount = escrow.amount - fee_amount;
+
+        // Transfer net amount to contributor
+        client.transfer(&env.current_contract_address(), &contributor, &net_amount);
+
+        // Transfer fee to fee recipient if applicable
+        if fee_amount > 0 {
+            client.transfer(
+                &env.current_contract_address(),
+                &fee_config.fee_recipient,
+                &fee_amount,
+            );
+            events::emit_fee_collected(
+                &env,
+                events::FeeCollected {
+                    operation_type: events::FeeOperationType::Release,
+                    amount: fee_amount,
+                    fee_rate: fee_config.release_fee_rate,
+                    recipient: fee_config.fee_recipient.clone(),
+                    timestamp: env.ledger().timestamp(),
+                },
+            );
+        }
+
+        // Update escrow state - mark as released and set remaining_amount to 0
+        escrow.status = EscrowStatus::Released;
+        escrow.remaining_amount = 0;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
 
         // Emit release event
         emit_funds_released(
             &env,
             FundsReleased {
                 bounty_id,
-                amount: escrow.amount,
+                amount: net_amount, // Emit net amount (after fee)
                 recipient: contributor.clone(),
                 timestamp: env.ledger().timestamp(),
             },
@@ -1327,10 +1500,10 @@ impl BountyEscrowContract {
         // Validate batch size
         let batch_size = items.len() as u32;
         if batch_size == 0 {
-            return Err(Error::InvalidAmount);
+            return Err(Error::InvalidBatchSize);
         }
         if batch_size > MAX_BATCH_SIZE {
-            return Err(Error::InvalidAmount);
+            return Err(Error::InvalidBatchSize);
         }
 
         if !env.storage().instance().has(&DataKey::Admin) {
@@ -1456,10 +1629,10 @@ impl BountyEscrowContract {
         // Validate batch size
         let batch_size = items.len() as u32;
         if batch_size == 0 {
-            return Err(Error::InvalidAmount);
+            return Err(Error::InvalidBatchSize);
         }
         if batch_size > MAX_BATCH_SIZE {
-            return Err(Error::InvalidAmount);
+            return Err(Error::InvalidBatchSize);
         }
 
         if !env.storage().instance().has(&DataKey::Admin) {
