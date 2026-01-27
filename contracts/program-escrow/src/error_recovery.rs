@@ -2,7 +2,6 @@
 
 use soroban_sdk::{contracttype, symbol_short, Address, Env, Symbol, Vec};
 
-
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -12,19 +11,19 @@ pub enum RecoveryError {
     TemporaryUnavailable = 101,
     RateLimitExceeded = 102,
     ResourceExhausted = 103,
-    
+
     // Permanent errors (cannot retry)
     InsufficientFunds = 200,
     InvalidRecipient = 201,
     Unauthorized = 202,
     InvalidAmount = 203,
     ProgramNotFound = 204,
-    
+
     // Batch operation errors
     PartialBatchFailure = 300,
     AllBatchItemsFailed = 301,
     BatchSizeMismatch = 302,
-    
+
     // Recovery state errors
     MaxRetriesExceeded = 400,
     RecoveryInProgress = 401,
@@ -36,9 +35,9 @@ pub enum RecoveryError {
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ErrorClass {
-    Transient,  // Can retry
-    Permanent,  // Cannot retry
-    Partial,    // Batch with mixed results
+    Transient, // Can retry
+    Permanent, // Cannot retry
+    Partial,   // Batch with mixed results
 }
 
 /// Classifies an error to determine if it can be retried
@@ -48,17 +47,17 @@ pub fn classify_error(error: RecoveryError) -> ErrorClass {
         | RecoveryError::TemporaryUnavailable
         | RecoveryError::RateLimitExceeded
         | RecoveryError::ResourceExhausted => ErrorClass::Transient,
-        
+
         RecoveryError::InsufficientFunds
         | RecoveryError::InvalidRecipient
         | RecoveryError::Unauthorized
         | RecoveryError::InvalidAmount
         | RecoveryError::ProgramNotFound => ErrorClass::Permanent,
-        
+
         RecoveryError::PartialBatchFailure
         | RecoveryError::AllBatchItemsFailed
         | RecoveryError::BatchSizeMismatch => ErrorClass::Partial,
-        
+
         RecoveryError::MaxRetriesExceeded
         | RecoveryError::RecoveryInProgress
         | RecoveryError::CircuitBreakerOpen
@@ -71,11 +70,11 @@ pub fn classify_error(error: RecoveryError) -> ErrorClass {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RetryConfig {
-    pub max_attempts: u32,        // Maximum retry attempts (e.g., 3-5)
-    pub initial_delay_ms: u64,    // Initial delay in milliseconds (e.g., 100ms)
-    pub max_delay_ms: u64,        // Maximum delay cap (e.g., 5000ms)
-    pub backoff_multiplier: u32,  // Multiplier for exponential backoff (e.g., 2)
-    pub jitter_percent: u32,      // Jitter percentage (0-100) to prevent thundering herd
+    pub max_attempts: u32,       // Maximum retry attempts (e.g., 3-5)
+    pub initial_delay_ms: u64,   // Initial delay in milliseconds (e.g., 100ms)
+    pub max_delay_ms: u64,       // Maximum delay cap (e.g., 5000ms)
+    pub backoff_multiplier: u32, // Multiplier for exponential backoff (e.g., 2)
+    pub jitter_percent: u32,     // Jitter percentage (0-100) to prevent thundering herd
 }
 
 impl RetryConfig {
@@ -88,7 +87,7 @@ impl RetryConfig {
             jitter_percent: 20,
         }
     }
-    
+
     /// Creates an aggressive retry configuration for critical operations
     pub fn aggressive(_env: &Env) -> Self {
         Self {
@@ -99,7 +98,7 @@ impl RetryConfig {
             jitter_percent: 15,
         }
     }
-    
+
     /// Creates a conservative retry configuration
     pub fn conservative(_env: &Env) -> Self {
         Self {
@@ -115,15 +114,17 @@ impl RetryConfig {
 pub fn calculate_backoff_delay(config: &RetryConfig, attempt: u32, env: &Env) -> u64 {
     // Calculate base delay with exponential backoff
     let multiplier_power = config.backoff_multiplier.pow(attempt);
-    let base_delay = config.initial_delay_ms.saturating_mul(multiplier_power as u64);
-    
+    let base_delay = config
+        .initial_delay_ms
+        .saturating_mul(multiplier_power as u64);
+
     // Cap at max delay
     let capped_delay = base_delay.min(config.max_delay_ms);
-    
+
     // Apply jitter to prevent thundering herd
     // Jitter range: delay * (1 - jitter%) to delay * (1 + jitter%)
     let jitter_range = (capped_delay * config.jitter_percent as u64) / 100;
-    
+
     // Use timestamp as pseudo-random seed for jitter
     if jitter_range > 0 {
         let timestamp = env.ledger().timestamp();
@@ -139,22 +140,22 @@ pub fn calculate_backoff_delay(config: &RetryConfig, attempt: u32, env: &Env) ->
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ErrorState {
-    pub operation_id: u64,              // Unique operation identifier
-    pub error_type: u32,                // RecoveryError as u32
-    pub retry_count: u32,               // Number of retry attempts made
-    pub last_retry_timestamp: u64,      // Timestamp of last retry
-    pub first_error_timestamp: u64,     // Timestamp of first error
-    pub can_recover: bool,              // Whether recovery is possible
-    pub error_message: Symbol,          // Short error description
-    pub caller: Address,                // Address that triggered operation
+    pub operation_id: u64,          // Unique operation identifier
+    pub error_type: u32,            // RecoveryError as u32
+    pub retry_count: u32,           // Number of retry attempts made
+    pub last_retry_timestamp: u64,  // Timestamp of last retry
+    pub first_error_timestamp: u64, // Timestamp of first error
+    pub can_recover: bool,          // Whether recovery is possible
+    pub error_message: Symbol,      // Short error description
+    pub caller: Address,            // Address that triggered operation
 }
 
 /// Storage key for error states
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ErrorStateKey {
-    State(u64),           // operation_id -> ErrorState
-    OperationCounter,     // Global counter for operation IDs
+    State(u64),       // operation_id -> ErrorState
+    OperationCounter, // Global counter for operation IDs
 }
 
 /// Creates a new error state
@@ -166,7 +167,7 @@ pub fn create_error_state(
 ) -> ErrorState {
     let error_class = classify_error(error);
     let can_recover = matches!(error_class, ErrorClass::Transient);
-    
+
     ErrorState {
         operation_id,
         error_type: error as u32,
@@ -183,7 +184,7 @@ pub fn create_error_state(
 pub fn store_error_state(env: &Env, state: &ErrorState) {
     let key = ErrorStateKey::State(state.operation_id);
     env.storage().persistent().set(&key, state);
-    
+
     // Extend TTL for 7 days (approx 120960 ledgers at 5s per ledger)
     env.storage().persistent().extend_ttl(&key, 120960, 120960);
 }
@@ -208,10 +209,10 @@ pub fn generate_operation_id(env: &Env) -> u64 {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BatchResult {
-    pub total_items: u32,           // Total items in batch
-    pub successful: u32,            // Number of successful items
-    pub failed: u32,                // Number of failed items
-    pub failed_indices: Vec<u32>,   // Indices of failed items
+    pub total_items: u32,                   // Total items in batch
+    pub successful: u32,                    // Number of successful items
+    pub failed: u32,                        // Number of failed items
+    pub failed_indices: Vec<u32>,           // Indices of failed items
     pub error_details: Vec<BatchItemError>, // Detailed error info
 }
 
@@ -219,12 +220,12 @@ pub struct BatchResult {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BatchItemError {
-    pub index: u32,             // Index in original batch
-    pub recipient: Address,     // Recipient address
-    pub amount: i128,           // Amount that failed
-    pub error_code: u32,        // RecoveryError as u32
-    pub can_retry: bool,        // Whether this item can be retried
-    pub timestamp: u64,         // When error occurred
+    pub index: u32,         // Index in original batch
+    pub recipient: Address, // Recipient address
+    pub amount: i128,       // Amount that failed
+    pub error_code: u32,    // RecoveryError as u32
+    pub can_retry: bool,    // Whether this item can be retried
+    pub timestamp: u64,     // When error occurred
 }
 
 impl BatchResult {
@@ -238,12 +239,12 @@ impl BatchResult {
             error_details: Vec::new(env),
         }
     }
-    
+
     /// Records a successful item
     pub fn record_success(&mut self) {
         self.successful = self.successful.saturating_add(1);
     }
-    
+
     /// Records a failed item
     pub fn record_failure(
         &mut self,
@@ -255,10 +256,10 @@ impl BatchResult {
     ) {
         self.failed = self.failed.saturating_add(1);
         self.failed_indices.push_back(index);
-        
+
         let error_class = classify_error(error);
         let can_retry = matches!(error_class, ErrorClass::Transient);
-        
+
         let error_detail = BatchItemError {
             index,
             recipient,
@@ -267,20 +268,20 @@ impl BatchResult {
             can_retry,
             timestamp: env.ledger().timestamp(),
         };
-        
+
         self.error_details.push_back(error_detail);
     }
-    
+
     /// Checks if batch was fully successful
     pub fn is_full_success(&self) -> bool {
         self.failed == 0
     }
-    
+
     /// Checks if batch was partial success
     pub fn is_partial_success(&self) -> bool {
         self.successful > 0 && self.failed > 0
     }
-    
+
     /// Checks if batch completely failed
     pub fn is_complete_failure(&self) -> bool {
         self.successful == 0 && self.failed > 0
@@ -292,9 +293,9 @@ impl BatchResult {
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CircuitState {
-    Closed = 0,    // Normal operation, requests allowed
-    Open = 1,      // Blocking requests due to failures
-    HalfOpen = 2,  // Testing if service recovered
+    Closed = 0,   // Normal operation, requests allowed
+    Open = 1,     // Blocking requests due to failures
+    HalfOpen = 2, // Testing if service recovered
 }
 
 /// Circuit breaker configuration and state
@@ -303,11 +304,11 @@ pub enum CircuitState {
 pub struct CircuitBreaker {
     pub state: CircuitState,
     pub failure_count: u32,
-    pub failure_threshold: u32,     // Failures before opening circuit
-    pub success_threshold: u32,     // Successes in half-open to close
-    pub timeout_duration: u64,      // Seconds before trying half-open
-    pub last_failure_time: u64,     // Timestamp of last failure
-    pub last_state_change: u64,     // Timestamp of last state change
+    pub failure_threshold: u32, // Failures before opening circuit
+    pub success_threshold: u32, // Successes in half-open to close
+    pub timeout_duration: u64,  // Seconds before trying half-open
+    pub last_failure_time: u64, // Timestamp of last failure
+    pub last_state_change: u64, // Timestamp of last state change
 }
 
 impl CircuitBreaker {
@@ -316,14 +317,14 @@ impl CircuitBreaker {
         Self {
             state: CircuitState::Closed,
             failure_count: 0,
-            failure_threshold: 5,      // Open after 5 failures
-            success_threshold: 2,      // Close after 2 successes in half-open
-            timeout_duration: 60,      // Try recovery after 60 seconds
+            failure_threshold: 5, // Open after 5 failures
+            success_threshold: 2, // Close after 2 successes in half-open
+            timeout_duration: 60, // Try recovery after 60 seconds
             last_failure_time: 0,
             last_state_change: env.ledger().timestamp(),
         }
     }
-    
+
     /// Records a successful operation
     pub fn record_success(&mut self, env: &Env) {
         match self.state {
@@ -345,13 +346,13 @@ impl CircuitBreaker {
             }
         }
     }
-    
+
     /// Records a failed operation
     pub fn record_failure(&mut self, env: &Env) {
         let now = env.ledger().timestamp();
         self.last_failure_time = now;
         self.failure_count = self.failure_count.saturating_add(1);
-        
+
         match self.state {
             CircuitState::Closed => {
                 if self.failure_count >= self.failure_threshold {
@@ -369,11 +370,11 @@ impl CircuitBreaker {
             }
         }
     }
-    
+
     /// Checks if operation is allowed
     pub fn is_request_allowed(&mut self, env: &Env) -> bool {
         let now = env.ledger().timestamp();
-        
+
         match self.state {
             CircuitState::Closed => true,
             CircuitState::Open => {
@@ -414,7 +415,7 @@ pub fn get_circuit_breaker(env: &Env, operation_type: Symbol) -> CircuitBreaker 
 pub fn store_circuit_breaker(env: &Env, operation_type: Symbol, breaker: &CircuitBreaker) {
     let key = CircuitBreakerKey::State(operation_type);
     env.storage().persistent().set(&key, breaker);
-    
+
     // Extend TTL for 1 day
     env.storage().persistent().extend_ttl(&key, 17280, 17280);
 }
@@ -472,7 +473,7 @@ pub fn emit_circuit_event(env: &Env, operation_type: Symbol, new_state: CircuitS
         CircuitState::Closed => CIRCUIT_CLOSED,
         CircuitState::HalfOpen => symbol_short!("circ_half"),
     };
-    
+
     env.events().publish(
         (topic, operation_type),
         (new_state as u32, env.ledger().timestamp()),
@@ -484,10 +485,10 @@ pub fn emit_circuit_event(env: &Env, operation_type: Symbol, new_state: CircuitS
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum RecoveryStrategy {
-    AutoRetry,      // Automatic retry with exponential backoff
-    ManualRetry,    // Requires manual intervention
-    Skip,           // Skip and continue
-    Abort,          // Abort entire operation
+    AutoRetry,   // Automatic retry with exponential backoff
+    ManualRetry, // Requires manual intervention
+    Skip,        // Skip and continue
+    Abort,       // Abort entire operation
 }
 
 /// Determines recovery strategy based on error type

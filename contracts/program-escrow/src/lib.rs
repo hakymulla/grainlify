@@ -378,8 +378,8 @@ mod anti_abuse {
     #[contracttype]
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct AntiAbuseConfig {
-        pub window_size: u64,      // Window size in seconds
-        pub max_operations: u32,   // Max operations allowed in window
+        pub window_size: u64,     // Window size in seconds
+        pub max_operations: u32,  // Max operations allowed in window
         pub cooldown_period: u64, // Minimum seconds between operations
     }
 
@@ -450,15 +450,22 @@ mod anti_abuse {
         let now = env.ledger().timestamp();
         let key = AntiAbuseKey::State(address.clone());
 
-        let mut state: AddressState = env.storage().persistent().get(&key).unwrap_or(AddressState {
-            last_operation_timestamp: 0,
-            window_start_timestamp: now,
-            operation_count: 0,
-        });
+        let mut state: AddressState =
+            env.storage()
+                .persistent()
+                .get(&key)
+                .unwrap_or(AddressState {
+                    last_operation_timestamp: 0,
+                    window_start_timestamp: now,
+                    operation_count: 0,
+                });
 
         // 1. Cooldown check
         if state.last_operation_timestamp > 0
-            && now < state.last_operation_timestamp.saturating_add(config.cooldown_period)
+            && now
+                < state
+                    .last_operation_timestamp
+                    .saturating_add(config.cooldown_period)
         {
             env.events().publish(
                 (symbol_short!("abuse"), symbol_short!("cooldown")),
@@ -468,7 +475,11 @@ mod anti_abuse {
         }
 
         // 2. Window check
-        if now >= state.window_start_timestamp.saturating_add(config.window_size) {
+        if now
+            >= state
+                .window_start_timestamp
+                .saturating_add(config.window_size)
+        {
             // New window
             state.window_start_timestamp = now;
             state.operation_count = 1;
@@ -497,7 +508,6 @@ mod anti_abuse {
 // ============================================================================
 
 /// Event emitted when a program is initialized/registerd
-
 const PROGRAM_REGISTERED: Symbol = symbol_short!("ProgReg");
 
 // ============================================================================
@@ -598,8 +608,8 @@ pub struct ProgramReleaseHistory {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReleaseType {
-    Automatic,  // Released automatically after timestamp
-    Manual,     // Released manually by authorized party
+    Automatic, // Released automatically after timestamp
+    Manual,    // Released manually by authorized party
 }
 
 /// Event emitted when a program release schedule is created.
@@ -657,7 +667,6 @@ pub struct ProgramScheduleReleased {
 ///     token_address: usdc_token_address,
 /// };
 /// ```
-
 /// Complete program state and configuration.
 ///
 /// # Storage Key
@@ -683,10 +692,10 @@ pub struct ProgramData {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DataKey {
-    Program(String), // program_id -> ProgramData
+    Program(String),              // program_id -> ProgramData
     ReleaseSchedule(String, u64), // program_id, schedule_id -> ProgramReleaseSchedule
-    ReleaseHistory(String), // program_id -> Vec<ProgramReleaseHistory>
-    NextScheduleId(String), // program_id -> next schedule_id
+    ReleaseHistory(String),       // program_id -> Vec<ProgramReleaseHistory>
+    NextScheduleId(String),       // program_id -> next schedule_id
 }
 
 // ============================================================================
@@ -772,7 +781,6 @@ impl ProgramEscrowContract {
     ///
     /// # Gas Cost
     /// Low - Initial storage writes
-
     pub fn initialize_program(
         env: Env,
         program_id: String,
@@ -786,7 +794,7 @@ impl ProgramEscrowContract {
         let caller = authorized_payout_key.clone();
 
         // Validate program_id
-        if program_id.len() == 0 {
+        if program_id.is_empty() {
             monitoring::track_operation(&env, symbol_short!("init_prg"), caller, false);
             panic!("Program ID cannot be empty");
         }
@@ -985,7 +993,6 @@ impl ProgramEscrowContract {
     /// - Forgetting to transfer tokens before calling
     /// -  Locking amount that exceeds actual contract balance
     /// -  Not verifying contract received the tokens
-
     pub fn lock_program_funds(env: Env, program_id: String, amount: i128) -> ProgramData {
         // Apply rate limiting
         anti_abuse::check_rate_limit(&env, env.current_contract_address());
@@ -1159,7 +1166,7 @@ impl ProgramEscrowContract {
     ) -> ProgramData {
         // Apply rate limiting to the contract itself or the program
         // We can't easily get the caller here without getting program data first
-        
+
         // Get program data
         let program_key = DataKey::Program(program_id.clone());
         let program_data: ProgramData = env
@@ -1269,7 +1276,7 @@ impl ProgramEscrowContract {
             (BATCH_PAYOUT,),
             (
                 program_id,
-                recipients.len() as u32,
+                recipients.len(),
                 total_payout,
                 updated_data.remaining_balance,
             ),
@@ -1330,286 +1337,6 @@ impl ProgramEscrowContract {
     /// # Use Cases
     /// - Individual prize awards
     /// - Bonus payments
-￼
-TrustUp-app/TrustUp-Contracts
-📚 Documentation: See docs/ for project context and standards
-
-🔖 Feature Title
-Add test to verify that removed updaters cannot modify scores
-
-📄 Description
-The Reputation Contract allows the admin to grant and revoke updater permissions via set_updater(address, allowed). However, there is no test verifying that a removed updater loses access.
-
-This is an important security test that validates the complete lifecycle of updater permissions:
-
-Admin grants updater permission
-Updater successfully modifies scores
-Admin revokes updater permission
-Former updater can no longer modify scores (should trigger NotUpdater error)
-This test ensures the access control system works correctly for permission revocation, not just granting.
-
-✅ Tasks to complete
-￼ Add test it_revokes_updater_access_after_removal - Complete lifecycle test:
-
-Setup: Admin grants updater permission with set_updater(updater, true)
-Verify: Updater can call increase_score() successfully
-Action: Admin revokes permission with set_updater(updater, false)
-Verify: is_updater(updater) returns false
-Verify: Updater calling increase_score() triggers NotUpdater error
-￼ Add test it_emits_event_on_updater_removal - Verify UPDCHGD event is emitted with correct data when removing updater
-
-￼ Add test it_handles_removing_non_existent_updater - Verify removing a never-added updater doesn't panic (graceful handling)
-
-🗒️ Additional notes
-Error code: NotUpdater = 2 (see errors.rs)
-Use #[should_panic(expected = "Error(Contract, #2)")] for the revocation verification
-The UPDCHGD event should emit (updater_address, false) when removing
-This test pattern validates the principle of least privilege is enforced
-Consider testing with multiple updaters to ensure removal is targeted (doesn't affect other updaters)
-￼
-Show less
-Applications
-Apply to work on this issue
-￼
-Georgechisom
-Hi, I love to work on this issue, pls help assign it to me
-
-
-Current assignments
-7
-Points earned this Wave
-1000
-OSS Activity Score
-Medium
-Total Merged PRs
-Very High
-PR Merge Rate
-Low
-￼
-View details
-￼
-Withdraw
-￼
-NueloSE
-Hi, i have experience writing and testing smart contracts, and have hand
-
-
-Current assignments
-16
-Points earned this Wave
-2450
-OSS Activity Score
-High
-Total Merged PRs
-Very High
-PR Merge Rate
-Low
-￼
-View details
-￼
-abbakargarba
-Hi maintainers,
-
-I’d like to work on this issue.
-
-This test is important for validating the full lifecycle of updater permissions, especially revocation, which is critical for enforcing least-privilege access in the Reputation Contract.
-
-I plan to:
-
-Add a lifecycle test that grants updater access, verifies successful score modification, revokes access, and confirms the updater can no longer modify scores
-Assert that is_updater(updater) correctly reflects the revoked state
-Verify the contract panics with NotUpdater (Error #2) when a removed updater attempts increase_score()
-Add an event test to ensure UPDCHGD is emitted with (updater_address, false) on removal
-Add a safety test to confirm removing a non-existent updater does not panic
-Follow existing test conventions and patterns in the repository and docs
-These tests will strengthen access-control guarantees and prevent regressions around permission revocation.
-
-Happy to implement and submit a PR.
-
-
-Current assignments
-1
-Points earned this Wave
-0
-OSS Activity Score
-No data
-Total Merged PRs
-Medium
-PR Merge Rate
-No data
-￼
-View details
-￼
-Obiajulu-gif
-GM maintainer, I would love to add the missing updater revocation test coverage by implementing three focused tests that validate the full permission lifecycle, event emission, and graceful removal handling—without adding repo/username references.
-
-
-Current assignments
-19
-Points earned this Wave
-2750
-OSS Activity Score
-High
-Total Merged PRs
-Very High
-PR Merge Rate
-Low
-￼
-View details
-￼
-Emmyt24
-I’d like to take on this task.. I’ll add a full lifecycle test confirming an updater can modify scores, is revoked via set_updater(updater, false), and then fails with NotUpdater (Error(Contract, #2)), plus a test asserting the UPDCHGD event emits (updater_address, false) on removal. I’ll also add a graceful-handling test for removing a never-added updater (and ensure revocation is targeted when multiple updaters exist), following the project standards in docs/.
-
-
-Current assignments
-10
-Points earned this Wave
-1700
-OSS Activity Score
-Medium
-Total Merged PRs
-Very High
-PR Merge Rate
-Medium
-￼
-View details
-￼
-Jeyvers
-Hi, I recently joined the wave so my hands are free. I can work on this pretty quickly. I have years of experience building.
-
-
-Current assignments
-2
-Points earned this Wave
-200
-OSS Activity Score
-No data
-Total Merged PRs
-High
-PR Merge Rate
-No data
-￼
-View details
-￼
-ussyalfaks
-I’d like to contribute by adding security focused tests that verify updater permission revocation works correctly in the Reputation Contract. I will implement lifecycle tests showing that an updater can modify scores when authorized, but immediately loses that ability once the admin revokes permission, triggering the expected NotUpdater error. I’ll also add coverage to confirm the updater-removal event (UPDCHGD) is emitted with correct data and that removing a non-existent updater is handled gracefully without panics. These tests will ensure access control enforces least privilege throughout the full grant revoke lifecycle.
-
-
-Current assignments
-28
-Points earned this Wave
-5700
-OSS Activity Score
-Very High
-Total Merged PRs
-Very High
-PR Merge Rate
-Medium
-￼
-View details
-￼
-respp
-Hello Trust Up Team! Can I take this issue?
-
-I'm a developer with a solid background in Web3, working across both front-end and back-end. Currently, I'm a maintainer at Koopay and StellarRent, where I lead the development of smart contracts and decentralized infrastructure. You can check out my profile to see my contributions to the most important projects within the Stellar ecosystem.
-
-Additionally, I have experience working in other ecosystems such as StarkNet, Optimism, and Worldcoin, with a focus on building scalable, secure, and efficient blockchain applications.
-
-
-Current assignments
-8
-Points earned this Wave
-750
-OSS Activity Score
-Extremely High
-Total Merged PRs
-Very High
-PR Merge Rate
-Low
-￼
-View details
-￼
-Mosas2000
-I’ll like to take up this issue, as I’m a full stack developer with a track record.
-
-
-Current assignments
-9
-Points earned this Wave
-1450
-OSS Activity Score
-High
-Total Merged PRs
-Very High
-PR Merge Rate
-Medium
-￼
-View details
-￼
-CMI-James
-I would like to take on this issue, I worked on many smart contract issue on OnlyDust, and I will like to take on this issue,
-
-ETA: 12 hours
-
-
-Current assignments
-20
-Points earned this Wave
-3750
-OSS Activity Score
-Very High
-Total Merged PRs
-Extremely High
-PR Merge Rate
-Medium
-￼
-View details
-￼
-Themancalledpg
-Hi, my name is Preciousgift, and I am a fullstack and smart contract developer skilled in React, Next.js, JavaScript, TypeScript, Tailwind CSS, and Soroban. For this task, I will:
-Add a full lifecycle unit test to verify updater permission revocation, ensuring a removed updater can no longer call increase_score() and triggers the NotUpdater error.
-Implement an event emission test to confirm the UPDCHGD event is correctly emitted with accurate data when an updater is removed.
-Add a robustness test to ensure removing a non-existent updater is handled gracefully without panics or unintended state changes.
-Run and validate the full test suite to confirm improved access control coverage and correct permission enforcement behavior.
-ETA: 10 hours
-
-
-Current assignments
-7
-Points earned this Wave
-0
-OSS Activity Score
-No data
-Total Merged PRs
-No data
-PR Merge Rate
-No data
-￼
-View details
-￼
-ryzen-xp
-Hi maintainers 👋
-I’m a blockchain developer with strong expertise in Stellar, Rust,TS and Stellar SDK integrations. I’ve worked on multiple Stellar-based smart contract and backend systems.
-
-I understand the scope of this issue and can deliver a reliable, production-quality solution with proper tests and documentation.
-Plz assign me !!
-
-ETA: 12 hours
-
-
-Current assignments
-33
-Points earned this Wave
-9100
-OSS Activity Score
-High
-Total Merged PRs
-Extremely High
-PR Merge Rate
-Medium
-￼
-View details
-
     /// - Late additions to prize pool distribution
     pub fn single_payout(
         env: Env,
@@ -1812,14 +1539,16 @@ View details
         };
 
         // Store schedule
-        env.storage()
-            .persistent()
-            .set(&DataKey::ReleaseSchedule(program_id.clone(), schedule_id), &schedule);
+        env.storage().persistent().set(
+            &DataKey::ReleaseSchedule(program_id.clone(), schedule_id),
+            &schedule,
+        );
 
         // Update next schedule ID
-        env.storage()
-            .persistent()
-            .set(&DataKey::NextScheduleId(program_id.clone()), &(schedule_id + 1));
+        env.storage().persistent().set(
+            &DataKey::NextScheduleId(program_id.clone()),
+            &(schedule_id + 1),
+        );
 
         // Emit program schedule created event
         env.events().publish(
@@ -1835,18 +1564,19 @@ View details
         );
 
         // Track successful operation
-        monitoring::track_operation(&env, symbol_short!("create_p"), program_data.authorized_payout_key, true);
+        monitoring::track_operation(
+            &env,
+            symbol_short!("create_p"),
+            program_data.authorized_payout_key,
+            true,
+        );
 
         // Track performance
         let duration = env.ledger().timestamp().saturating_sub(start);
         monitoring::emit_performance(&env, symbol_short!("create_p"), duration);
 
         // Return updated program data
-        let updated_data: ProgramData = env
-            .storage()
-            .instance()
-            .get(&program_key)
-            .unwrap();
+        let updated_data: ProgramData = env.storage().instance().get(&program_key).unwrap();
         updated_data
     }
 
@@ -1876,11 +1606,7 @@ View details
     /// // Anyone can call this after the timestamp
     /// escrow_client.release_program_schedule_automatic(&"Hackathon2024", &1);
     /// ```
-    pub fn release_prog_schedule_automatic(
-        env: Env,
-        program_id: String,
-        schedule_id: u64,
-    ) {
+    pub fn release_prog_schedule_automatic(env: Env, program_id: String, schedule_id: u64) {
         let start = env.ledger().timestamp();
         let caller = env.current_contract_address();
 
@@ -1953,9 +1679,10 @@ View details
         history.push_back(history_entry);
 
         // Store updates
-        env.storage()
-            .persistent()
-            .set(&DataKey::ReleaseSchedule(program_id.clone(), schedule_id), &schedule);
+        env.storage().persistent().set(
+            &DataKey::ReleaseSchedule(program_id.clone(), schedule_id),
+            &schedule,
+        );
         env.storage().instance().set(&program_key, &updated_data);
         env.storage()
             .persistent()
@@ -2012,11 +1739,7 @@ View details
     /// // Authorized key can release early
     /// escrow_client.release_program_schedule_manual(&"Hackathon2024", &1);
     /// ```
-    pub fn release_program_schedule_manual(
-        env: Env,
-        program_id: String,
-        schedule_id: u64,
-    ) {
+    pub fn release_program_schedule_manual(env: Env, program_id: String, schedule_id: u64) {
         let start = env.ledger().timestamp();
 
         // Get program data
@@ -2089,9 +1812,10 @@ View details
         history.push_back(history_entry);
 
         // Store updates
-        env.storage()
-            .persistent()
-            .set(&DataKey::ReleaseSchedule(program_id.clone(), schedule_id), &schedule);
+        env.storage().persistent().set(
+            &DataKey::ReleaseSchedule(program_id.clone(), schedule_id),
+            &schedule,
+        );
         env.storage().instance().set(&program_key, &updated_data);
         env.storage()
             .persistent()
@@ -2112,7 +1836,12 @@ View details
         );
 
         // Track successful operation
-        monitoring::track_operation(&env, symbol_short!("rel_man"), program_data.authorized_payout_key, true);
+        monitoring::track_operation(
+            &env,
+            symbol_short!("rel_man"),
+            program_data.authorized_payout_key,
+            true,
+        );
 
         // Track performance
         let duration = env.ledger().timestamp().saturating_sub(start);
@@ -2380,7 +2109,10 @@ View details
     ///
     /// # Returns
     /// * `Vec<ProgramReleaseSchedule>` - All schedules for the program
-    pub fn get_all_prog_release_schedules(env: Env, program_id: String) -> Vec<ProgramReleaseSchedule> {
+    pub fn get_all_prog_release_schedules(
+        env: Env,
+        program_id: String,
+    ) -> Vec<ProgramReleaseSchedule> {
         let mut schedules = Vec::new(&env);
         let next_id: u64 = env
             .storage()
@@ -2414,16 +2146,19 @@ View details
     ///
     /// # Returns
     /// * `Vec<ProgramReleaseSchedule>` - All pending schedules
-    pub fn get_pending_program_schedules(env: Env, program_id: String) -> Vec<ProgramReleaseSchedule> {
+    pub fn get_pending_program_schedules(
+        env: Env,
+        program_id: String,
+    ) -> Vec<ProgramReleaseSchedule> {
         let all_schedules = Self::get_all_prog_release_schedules(env.clone(), program_id.clone());
         let mut pending = Vec::new(&env);
-        
+
         for schedule in all_schedules.iter() {
             if !schedule.released {
                 pending.push_back(schedule.clone());
             }
         }
-        
+
         pending
     }
 
@@ -2439,13 +2174,13 @@ View details
         let pending = Self::get_pending_program_schedules(env.clone(), program_id.clone());
         let mut due = Vec::new(&env);
         let now = env.ledger().timestamp();
-        
+
         for schedule in pending.iter() {
             if schedule.release_timestamp <= now {
                 due.push_back(schedule.clone());
             }
         }
-        
+
         due
     }
 
@@ -2528,16 +2263,21 @@ mod test {
     ) {
         // Register program
         client.register_program(program_id, token, authorized_key);
-        
+
         // Create and fund token
         let token_client = create_token_contract(env, authorized_key);
         let token_admin = token::StellarAssetClient::new(env, &token_client.address);
         token_admin.mint(authorized_key, &total_amount);
-        
+
         // Lock funds for program
-        token_client.approve(authorized_key, &env.current_contract_address(), &total_amount, &1000);
+        token_client.approve(
+            authorized_key,
+            &env.current_contract_address(),
+            &total_amount,
+            &1000,
+        );
         client.lock_funds(program_id, &total_amount);
-        
+
         // Create release schedule
         client.create_program_release_schedule(
             program_id,
@@ -2552,16 +2292,16 @@ mod test {
         let env = Env::default();
         let contract_id = env.register_contract(None, ProgramEscrowContract);
         let client = ProgramEscrowContractClient::new(&env, &contract_id);
-        
+
         let authorized_key = Address::generate(&env);
         let winner = Address::generate(&env);
         let token = Address::generate(&env);
         let program_id = String::from_str(&env, "Hackathon2024");
         let amount = 1000_0000000;
         let release_timestamp = 1000;
-        
+
         env.mock_all_auths();
-        
+
         // Setup program with schedule
         setup_program_with_schedule(
             &env,
@@ -2573,7 +2313,7 @@ mod test {
             &winner,
             release_timestamp,
         );
-        
+
         // Verify schedule was created
         let schedule = client.get_program_release_schedule(&program_id, &1);
         assert_eq!(schedule.schedule_id, 1);
@@ -2581,11 +2321,11 @@ mod test {
         assert_eq!(schedule.release_timestamp, release_timestamp);
         assert_eq!(schedule.recipient, winner);
         assert!(!schedule.released);
-        
+
         // Check pending schedules
         let pending = client.get_pending_program_schedules(&program_id);
         assert_eq!(pending.len(), 1);
-        
+
         // Event verification can be added later - focusing on core functionality
     }
 
@@ -2594,7 +2334,7 @@ mod test {
         let env = Env::default();
         let contract_id = env.register_contract(None, ProgramEscrowContract);
         let client = ProgramEscrowContractClient::new(&env, &contract_id);
-        
+
         let authorized_key = Address::generate(&env);
         let winner1 = Address::generate(&env);
         let winner2 = Address::generate(&env);
@@ -2603,59 +2343,54 @@ mod test {
         let amount1 = 600_0000000;
         let amount2 = 400_0000000;
         let total_amount = amount1 + amount2;
-        
+
         env.mock_all_auths();
-        
+
         // Register program
         client.register_program(&program_id, &token, &authorized_key);
-        
+
         // Create and fund token
         let token_client = create_token_contract(&env, &authorized_key);
         let token_admin = token::StellarAssetClient::new(&env, &token_client.address);
         token_admin.mint(&authorized_key, &total_amount);
-        
+
         // Lock funds for program
-        token_client.approve(&authorized_key, &env.current_contract_address(), &total_amount, &1000);
-        client.lock_funds(&program_id, &total_amount);
-        
-        // Create first release schedule
-        client.create_program_release_schedule(
-            &program_id,
-            &amount1,
+        token_client.approve(
+            &authorized_key,
+            &env.current_contract_address(),
+            &total_amount,
             &1000,
-            &winner1.clone(),
         );
-        
+        client.lock_funds(&program_id, &total_amount);
+
+        // Create first release schedule
+        client.create_program_release_schedule(&program_id, &amount1, &1000, &winner1.clone());
+
         // Create second release schedule
-        client.create_program_release_schedule(
-            &program_id,
-            &amount2,
-            &2000,
-            &winner2.clone(),
-        );
-        
+        client.create_program_release_schedule(&program_id, &amount2, &2000, &winner2.clone());
+
         // Verify both schedules exist
         let all_schedules = client.get_all_prog_release_schedules(&program_id);
         assert_eq!(all_schedules.len(), 2);
-        
+
         // Verify schedule IDs
         let schedule1 = client.get_program_release_schedule(&program_id, &1);
         let schedule2 = client.get_program_release_schedule(&program_id, &2);
         assert_eq!(schedule1.schedule_id, 1);
         assert_eq!(schedule2.schedule_id, 2);
-        
+
         // Verify amounts
         assert_eq!(schedule1.amount, amount1);
         assert_eq!(schedule2.amount, amount2);
-        
+
         // Verify recipients
         assert_eq!(schedule1.recipient, winner1);
         assert_eq!(schedule2.recipient, winner2);
-        
+
         // Check pending schedules
         let pending = client.get_pending_program_schedules(&program_id);
         assert_eq!(pending.len(), 2);
-        
+
         // Event verification can be added later - focusing on core functionality
     }
 
@@ -2664,16 +2399,16 @@ mod test {
         let env = Env::default();
         let contract_id = env.register_contract(None, ProgramEscrowContract);
         let client = ProgramEscrowContractClient::new(&env, &contract_id);
-        
+
         let authorized_key = Address::generate(&env);
         let winner = Address::generate(&env);
         let token = Address::generate(&env);
         let program_id = String::from_str(&env, "Hackathon2024");
         let amount = 1000_0000000;
         let release_timestamp = 1000;
-        
+
         env.mock_all_auths();
-        
+
         // Setup program with schedule
         setup_program_with_schedule(
             &env,
@@ -2685,33 +2420,33 @@ mod test {
             &winner,
             release_timestamp,
         );
-        
+
         // Try to release before timestamp (should fail)
         env.ledger().set_timestamp(999);
         let result = client.try_release_prog_schedule_automatic(&program_id, &1);
         assert!(result.is_err());
-        
+
         // Advance time to after release timestamp
         env.ledger().set_timestamp(1001);
-        
+
         // Release automatically
         client.release_prog_schedule_automatic(&program_id, &1);
-        
+
         // Verify schedule was released
         let schedule = client.get_program_release_schedule(&program_id, &1);
         assert!(schedule.released);
         assert_eq!(schedule.released_at, Some(1001));
         assert_eq!(schedule.released_by, Some(env.current_contract_address()));
-        
+
         // Check no pending schedules
         let pending = client.get_pending_program_schedules(&program_id);
         assert_eq!(pending.len(), 0);
-        
+
         // Verify release history
         let history = client.get_program_release_history(&program_id);
         assert_eq!(history.len(), 1);
         assert_eq!(history.get(0).unwrap().release_type, ReleaseType::Automatic);
-        
+
         // Event verification can be added later - focusing on core functionality
     }
 
@@ -2720,16 +2455,16 @@ mod test {
         let env = Env::default();
         let contract_id = env.register_contract(None, ProgramEscrowContract);
         let client = ProgramEscrowContractClient::new(&env, &contract_id);
-        
+
         let authorized_key = Address::generate(&env);
         let winner = Address::generate(&env);
         let token = Address::generate(&env);
         let program_id = String::from_str(&env, "Hackathon2024");
         let amount = 1000_0000000;
         let release_timestamp = 1000;
-        
+
         env.mock_all_auths();
-        
+
         // Setup program with schedule
         setup_program_with_schedule(
             &env,
@@ -2741,22 +2476,22 @@ mod test {
             &winner,
             release_timestamp,
         );
-        
+
         // Manually release before timestamp (authorized key can do this)
         env.ledger().set_timestamp(999);
         client.release_prog_schedule_manual(&program_id, &1);
-        
+
         // Verify schedule was released
         let schedule = client.get_program_release_schedule(&program_id, &1);
         assert!(schedule.released);
         assert_eq!(schedule.released_at, Some(999));
         assert_eq!(schedule.released_by, Some(authorized_key.clone()));
-        
+
         // Verify release history
         let history = client.get_program_release_history(&program_id);
         assert_eq!(history.len(), 1);
         assert_eq!(history.get(0).unwrap().release_type, ReleaseType::Manual);
-        
+
         // Event verification can be added later - focusing on core functionality
     }
 
@@ -2765,7 +2500,7 @@ mod test {
         let env = Env::default();
         let contract_id = env.register_contract(None, ProgramEscrowContract);
         let client = ProgramEscrowContractClient::new(&env, &contract_id);
-        
+
         let authorized_key = Address::generate(&env);
         let winner1 = Address::generate(&env);
         let winner2 = Address::generate(&env);
@@ -2774,66 +2509,61 @@ mod test {
         let amount1 = 600_0000000;
         let amount2 = 400_0000000;
         let total_amount = amount1 + amount2;
-        
+
         env.mock_all_auths();
-        
+
         // Register program
         client.register_program(&program_id, &token, &authorized_key);
-        
+
         // Create and fund token
         let token_client = create_token_contract(&env, &authorized_key);
         let token_admin = token::StellarAssetClient::new(&env, &token_client.address);
         token_admin.mint(&authorized_key, &total_amount);
-        
+
         // Lock funds for program
-        token_client.approve(&authorized_key, &env.current_contract_address(), &total_amount, &1000);
-        client.lock_funds(&program_id, &total_amount);
-        
-        // Create first schedule
-        client.create_program_release_schedule(
-            &program_id,
-            &amount1,
+        token_client.approve(
+            &authorized_key,
+            &env.current_contract_address(),
+            &total_amount,
             &1000,
-            &winner1.clone(),
         );
-        
+        client.lock_funds(&program_id, &total_amount);
+
+        // Create first schedule
+        client.create_program_release_schedule(&program_id, &amount1, &1000, &winner1.clone());
+
         // Create second schedule
-        client.create_program_release_schedule(
-            &program_id,
-            &amount2,
-            &2000,
-            &winner2.clone(),
-        );
-        
+        client.create_program_release_schedule(&program_id, &amount2, &2000, &winner2.clone());
+
         // Release first schedule manually
         client.release_prog_schedule_manual(&program_id, &1);
-        
+
         // Advance time and release second schedule automatically
         env.ledger().set_timestamp(2001);
         client.release_prog_schedule_automatic(&program_id, &2);
-        
+
         // Verify complete history
         let history = client.get_program_release_history(&program_id);
         assert_eq!(history.len(), 2);
-        
+
         // Check first release (manual)
         let first_release = history.get(0).unwrap();
         assert_eq!(first_release.schedule_id, 1);
         assert_eq!(first_release.amount, amount1);
         assert_eq!(first_release.recipient, winner1);
         assert_eq!(first_release.release_type, ReleaseType::Manual);
-        
+
         // Check second release (automatic)
         let second_release = history.get(1).unwrap();
         assert_eq!(second_release.schedule_id, 2);
         assert_eq!(second_release.amount, amount2);
         assert_eq!(second_release.recipient, winner2);
         assert_eq!(second_release.release_type, ReleaseType::Automatic);
-        
+
         // Verify no pending schedules
         let pending = client.get_pending_program_schedules(&program_id);
         assert_eq!(pending.len(), 0);
-        
+
         // Verify all schedules are marked as released
         let all_schedules = client.get_all_prog_release_schedules(&program_id);
         assert_eq!(all_schedules.len(), 2);
@@ -2846,7 +2576,7 @@ mod test {
         let env = Env::default();
         let contract_id = env.register_contract(None, ProgramEscrowContract);
         let client = ProgramEscrowContractClient::new(&env, &contract_id);
-        
+
         let authorized_key = Address::generate(&env);
         let winner1 = Address::generate(&env);
         let winner2 = Address::generate(&env);
@@ -2858,21 +2588,26 @@ mod test {
         let amount3 = 400_0000000;
         let total_amount = amount1 + amount2 + amount3;
         let base_timestamp = 1000;
-        
+
         env.mock_all_auths();
-        
+
         // Register program
         client.register_program(&program_id, &token, &authorized_key);
-        
+
         // Create and fund token
         let token_client = create_token_contract(&env, &authorized_key);
         let token_admin = token::StellarAssetClient::new(&env, &token_client.address);
         token_admin.mint(&authorized_key, &total_amount);
-        
+
         // Lock funds for program
-        token_client.approve(&authorized_key, &env.current_contract_address(), &total_amount, &1000);
+        token_client.approve(
+            &authorized_key,
+            &env.current_contract_address(),
+            &total_amount,
+            &1000,
+        );
         client.lock_funds(&program_id, &total_amount);
-        
+
         // Create overlapping schedules (all at same timestamp)
         client.create_program_release_schedule(
             &program_id,
@@ -2880,46 +2615,46 @@ mod test {
             &base_timestamp,
             &winner1.clone(),
         );
-        
+
         client.create_program_release_schedule(
             &program_id,
             &amount2,
             &base_timestamp,
             &winner2.clone(),
         );
-        
+
         client.create_program_release_schedule(
             &program_id,
             &amount3,
             &base_timestamp,
             &winner3.clone(),
         );
-        
+
         // Advance time to after release timestamp
         env.ledger().set_timestamp(base_timestamp + 1);
-        
+
         // Check due schedules (should be all 3)
         let due = client.get_due_program_schedules(&program_id);
         assert_eq!(due.len(), 3);
-        
+
         // Release schedules one by one
         client.release_prog_schedule_automatic(&program_id, &1);
         client.release_prog_schedule_automatic(&program_id, &2);
         client.release_prog_schedule_automatic(&program_id, &3);
-        
+
         // Verify all schedules are released
         let pending = client.get_pending_program_schedules(&program_id);
         assert_eq!(pending.len(), 0);
-        
+
         // Verify complete history
         let history = client.get_program_release_history(&program_id);
         assert_eq!(history.len(), 3);
-        
+
         // Verify all were automatic releases
         for release in history.iter() {
             assert_eq!(release.release_type, ReleaseType::Automatic);
         }
-        
+
         // Event verification can be added later - focusing on core functionality
     }
 
@@ -3231,12 +2966,12 @@ mod test {
 
         let backend = Address::generate(&env);
         let token = Address::generate(&env);
-        
+
         client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
-        
+
         // Advance time by 30s (less than 60s cooldown)
         env.ledger().with_mut(|li| li.timestamp += 30);
-        
+
         client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
     }
 
@@ -3255,10 +2990,11 @@ mod test {
 
         let backend = Address::generate(&env);
         let token = Address::generate(&env);
-        
+
         client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
         client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
-        client.initialize_program(&String::from_str(&env, "P3"), &backend, &token); // Should panic
+        client.initialize_program(&String::from_str(&env, "P3"), &backend, &token);
+        // Should panic
     }
 
     #[test]
@@ -3275,11 +3011,12 @@ mod test {
 
         let backend = Address::generate(&env);
         let token = Address::generate(&env);
-        
+
         client.set_whitelist(&backend, &true);
-        
+
         client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
-        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token); // Should work because whitelisted
+        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
+        // Should work because whitelisted
     }
 
     #[test]
@@ -3291,9 +3028,9 @@ mod test {
 
         let admin = Address::generate(&env);
         client.set_admin(&admin);
-        
+
         client.update_rate_limit_config(&7200, &5, &120);
-        
+
         let config = client.get_rate_limit_config();
         assert_eq!(config.window_size, 7200);
         assert_eq!(config.max_operations, 5);
