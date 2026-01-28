@@ -486,7 +486,7 @@ export function DiscoverPage({
                     theme === "dark" ? "text-[#d4d4d4]" : "text-[#7a6b5a]"
                   }`}
                 >
-                  {project.description}
+                  {project.description?.trim() || "No description"}
                 </p>
 
                 <div
