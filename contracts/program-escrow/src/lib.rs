@@ -2420,7 +2420,7 @@ mod test {
         release_timestamp: u64,
     ) {
         // Register program
-        client.initialize_program(program_id, authorized_key, token);
+        client.initialize_program(program_id, authorized_key, token, authorized_key, &None);
 
         // Create and fund token
         let token_client = create_token_contract(env, authorized_key);
@@ -2505,7 +2505,7 @@ mod test {
         env.mock_all_auths();
 
         // Register program
-        client.initialize_program(&program_id, &authorized_key, &token);
+        client.initialize_program(&program_id, &authorized_key, &token, &authorized_key, &None);
 
         // Create and fund token
         let token_client = create_token_contract(&env, &authorized_key);
@@ -2671,7 +2671,7 @@ mod test {
         env.mock_all_auths();
 
         // Register program
-        client.initialize_program(&program_id, &authorized_key, &token);
+        client.initialize_program(&program_id, &authorized_key, &token, &authorized_key, &None);
 
         // Create and fund token
         let token_client = create_token_contract(&env, &authorized_key);
@@ -2750,7 +2750,7 @@ mod test {
         env.mock_all_auths();
 
         // Register program
-        client.initialize_program(&program_id, &authorized_key, &token);
+        client.initialize_program(&program_id, &authorized_key, &token, &authorized_key, &None);
 
         // Create and fund token
         let token_client = create_token_contract(&env, &authorized_key);
@@ -2827,7 +2827,7 @@ mod test {
         let prog_id = String::from_str(&env, "Hackathon2024");
 
         // Register program
-        let program = client.initialize_program(&prog_id, &backend, &token);
+        let program = client.initialize_program(&prog_id, &backend, &token, &backend, &None);
 
         // Verify program data
         assert_eq!(program.program_id, prog_id);
@@ -2858,9 +2858,9 @@ mod test {
         let prog2 = String::from_str(&env, "Stellar2024");
         let prog3 = String::from_str(&env, "BuildathonQ1");
 
-        client.initialize_program(&prog1, &backend1, &token);
-        client.initialize_program(&prog2, &backend2, &token);
-        client.initialize_program(&prog3, &backend3, &token);
+        client.initialize_program(&prog1, &backend1, &token, &backend1, &None);
+        client.initialize_program(&prog2, &backend2, &token, &backend2, &None);
+        client.initialize_program(&prog3, &backend3, &token, &backend3, &None);
 
         // Verify all exist
         assert!(client.program_exists(&prog1));
@@ -2898,10 +2898,10 @@ mod test {
         let prog_id = String::from_str(&env, "Hackathon2024");
 
         // Register once - should succeed
-        client.initialize_program(&prog_id, &backend, &token);
+        client.initialize_program(&prog_id, &backend, &token, &backend, &None);
 
         // Register again - should panic
-        client.initialize_program(&prog_id, &backend, &token);
+        client.initialize_program(&prog_id, &backend, &token, &backend, &None);
     }
 
     #[test]
@@ -2915,7 +2915,7 @@ mod test {
         let token = Address::generate(&env);
         let empty_id = String::from_str(&env, "");
 
-        client.initialize_program(&empty_id, &backend, &token);
+        client.initialize_program(&empty_id, &backend, &token, &backend, &None);
     }
 
     #[test]
@@ -2947,7 +2947,7 @@ mod test {
         let prog_id = String::from_str(&env, "Hackathon2024");
 
         // Register program
-        client.initialize_program(&prog_id, &backend, &token_client.address);
+        client.initialize_program(&prog_id, &backend, &token_client.address, &backend, &None);
 
         // Lock funds
         let amount = 10_000_0000000i128; // 10,000 USDC
@@ -2974,8 +2974,8 @@ mod test {
         let prog2 = String::from_str(&env, "Program2");
 
         // Register programs
-        client.initialize_program(&prog1, &backend1, &token_client.address);
-        client.initialize_program(&prog2, &backend2, &token_client.address);
+        client.initialize_program(&prog1, &backend1, &token_client.address, &backend1, &None);
+        client.initialize_program(&prog2, &backend2, &token_client.address, &backend2, &None);
 
         // Lock different amounts in each program
         let amount1 = 5_000_0000000i128;
@@ -3007,7 +3007,7 @@ mod test {
         let backend = Address::generate(&env);
         let prog_id = String::from_str(&env, "Hackathon2024");
 
-        client.initialize_program(&prog_id, &backend, &token_client.address);
+        client.initialize_program(&prog_id, &backend, &token_client.address, &backend, &None);
 
         // Lock funds multiple times
         client.lock_program_funds(&prog_id, &1_000_0000000);
@@ -3030,7 +3030,7 @@ mod test {
         let token = Address::generate(&env);
         let prog_id = String::from_str(&env, "Hackathon2024");
 
-        client.initialize_program(&prog_id, &backend, &token);
+        client.initialize_program(&prog_id, &backend, &token, &backend, &None);
         client.lock_program_funds(&prog_id, &0);
     }
 
@@ -3052,7 +3052,7 @@ mod test {
         let backend = Address::generate(&env);
         let prog_id = String::from_str(&env, "Test");
 
-        client.initialize_program(&prog_id, &backend, &token_client.address);
+        client.initialize_program(&prog_id, &backend, &token_client.address, &backend, &None);
         client.lock_program_funds(&prog_id, &10_000_0000000);
 
         let recipients = soroban_sdk::vec![&env, Address::generate(&env), Address::generate(&env)];
@@ -3075,7 +3075,7 @@ mod test {
         let backend = Address::generate(&env);
         let prog_id = String::from_str(&env, "Test");
 
-        client.initialize_program(&prog_id, &backend, &token_client.address);
+        client.initialize_program(&prog_id, &backend, &token_client.address, &backend, &None);
         client.lock_program_funds(&prog_id, &5_000_0000000);
 
         let recipients = soroban_sdk::vec![&env, Address::generate(&env)];
@@ -3095,13 +3095,13 @@ mod test {
         let backend = Address::generate(&env);
         let token = Address::generate(&env);
 
-        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token, &backend, &None);
         assert_eq!(client.get_program_count(), 1);
 
-        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token, &backend, &None);
         assert_eq!(client.get_program_count(), 2);
 
-        client.initialize_program(&String::from_str(&env, "P3"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P3"), &backend, &token, &backend, &None);
         assert_eq!(client.get_program_count(), 3);
     }
 
@@ -3125,12 +3125,12 @@ mod test {
         let backend = Address::generate(&env);
         let token = Address::generate(&env);
 
-        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token, &backend, &None);
 
         // Advance time by 30s (less than 60s cooldown)
         env.ledger().with_mut(|li| li.timestamp += 30);
 
-        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token, &backend, &None);
     }
 
     #[test]
@@ -3149,9 +3149,9 @@ mod test {
         let backend = Address::generate(&env);
         let token = Address::generate(&env);
 
-        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
-        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
-        client.initialize_program(&String::from_str(&env, "P3"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token, &backend, &None);
+        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token, &backend, &None);
+        client.initialize_program(&String::from_str(&env, "P3"), &backend, &token, &backend, &None);
         // Should panic
     }
 
@@ -3172,8 +3172,8 @@ mod test {
 
         client.set_whitelist(&backend, &true);
 
-        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token);
-        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token);
+        client.initialize_program(&String::from_str(&env, "P1"), &backend, &token, &backend, &None);
+        client.initialize_program(&String::from_str(&env, "P2"), &backend, &token, &backend, &None);
         // Should work because whitelisted
     }
 

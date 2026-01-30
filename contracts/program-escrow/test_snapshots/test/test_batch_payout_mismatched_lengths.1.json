@@ -464,6 +464,20 @@
                             },
                             {
                               "key": {
+                                "symbol": "deadline"
+                              },
+                              "val": "void"
+                            },
+                            {
+                              "key": {
+                                "symbol": "organizer"
+                              },
+                              "val": {
+                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                              }
+                            },
+                            {
+                              "key": {
                                 "symbol": "payout_history"
                               },
                               "val": {
@@ -805,7 +819,11 @@
                 },
                 {
                   "address": "CBUSYNQKASUYFWYC3M2GUEDMX4AIVWPALDBYJPNK6554BREHTGZ2IUNF"
-                }
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                },
+                "void"
               ]
             }
           }
@@ -980,6 +998,20 @@
                 },
                 {
                   "key": {
+                    "symbol": "deadline"
+                  },
+                  "val": "void"
+                },
+                {
+                  "key": {
+                    "symbol": "organizer"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "payout_history"
                   },
                   "val": {
@@ -1130,6 +1162,20 @@
                 },
                 {
                   "key": {
+                    "symbol": "deadline"
+                  },
+                  "val": "void"
+                },
+                {
+                  "key": {
+                    "symbol": "organizer"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "payout_history"
                   },
                   "val": {
@@ -1246,7 +1292,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'Recipients and amounts vectors must have the same length' from contract function 'Symbol(obj#315)'"
+                  "string": "caught panic 'Recipients and amounts vectors must have the same length' from contract function 'Symbol(obj#317)'"
                 },
                 {
                   "string": "Test"
