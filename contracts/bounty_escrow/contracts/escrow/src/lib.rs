@@ -1561,3 +1561,12 @@ impl BountyEscrowContract {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod test_fuzz_properties;
+
+#[cfg(test)]
+mod test_edge_cases;
+
+#[cfg(test)]
+mod test_invalid_inputs;
